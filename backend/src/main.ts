@@ -13,16 +13,14 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   console.log('3 - Config carregada');
 
-console.log(
-  'CORS_ORIGIN =',
-  configService.get<string>('CORS_ORIGIN'),
-);
+  console.log('CORS_ORIGIN =', configService.get<string>('CORS_ORIGIN'));
 
-app.enableCors({
-  origin: configService.get<string>('CORS_ORIGIN'),
-  credentials: true,
-});
-  app.useGlobalPiapp.enableCorspes(
+  app.enableCors({
+    origin: configService.get<string>('CORS_ORIGIN'),
+    credentials: true,
+  });
+
+  app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
