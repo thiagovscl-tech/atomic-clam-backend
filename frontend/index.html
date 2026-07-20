@@ -1060,15 +1060,7 @@
             </span>
             <span class="ac-oauth-label">Google</span>
             <span class="ac-google-overlay">
-              <div id="g_id_onload"
-                   data-client_id=""
-                   data-callback="handleGoogleCredentialResponse"
-                   data-auto_prompt="false"></div>
-              <div class="g_id_signin"
-                   data-type="icon"
-                   data-shape="circle"
-                   data-theme="filled_black"
-                   data-size="large"></div>
+            <div id="googleButton"></div>
             </span>
           </button>
 
@@ -1422,16 +1414,27 @@
         window.setTimeout(() => showView(sessionAgeVerification?.ageVerified ? "login" : "age"), motionQuery.matches ? 30 : 280);
       }
 
-      function showView(name) {
-        window.clearTimeout(splashTimer);
-        app.dataset.currentView = name;
-        views.forEach((view) => {
-          view.classList.remove("is-leaving");
-          view.classList.toggle("is-active", view.dataset.view === name);
-        });
-        const firstInput = app.querySelector(`[data-view="${name}"] input`);
-        if (firstInput) window.setTimeout(() => firstInput.focus(), 120);
-      }
+  function showView(name) {
+    window.clearTimeout(splashTimer);
+
+    app.dataset.currentView = name;
+
+    views.forEach((view) => {
+        view.classList.remove("is-leaving");
+        view.classList.toggle("is-active", view.dataset.view === name);
+    });
+
+    const firstInput = app.querySelector(`[data-view="${name}"] input`);
+    if (firstInput)
+        window.setTimeout(() => firstInput.focus(), 120);
+
+    // Inicializa o botão do Google quando a tela de login é exibida
+    if (name === "login") {
+        window.setTimeout(() => {
+            initializeGoogleLogin();
+        }, 50);
+    }
+}
 
       function showToast(message) {
         toast.textContent = message;
@@ -1618,15 +1621,49 @@
       // usa o MESMO AuthenticationService no backend.
       const googleClientIdMeta = document.querySelector('meta[name="atomic-clam-google-client-id"]');
       const apiBaseMeta = document.querySelector('meta[name="atomic-clam-api-base"]');
-      const GOOGLE_CLIENT_ID = googleClientIdMeta ? googleClientIdMeta.content : "";
+     const GOOGLE_CLIENT_ID = googleClientIdMeta ? googleClientIdMeta.content : "";
+
+function initializeGoogleLogin() {
+
+    if (!GOOGLE_CLIENT_ID) {
+        console.error("Google Client ID não encontrado.");
+        return;
+    }
+
+    if (!window.google || !google.accounts) {
+        console.error("Google Identity Services ainda não carregou.");
+        return;
+    }
+
+    google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true
+    });
+
+    const container = document.getElementById("googleButton");
+
+    if (!container)
+        return;
+
+    container.innerHTML = "";
+
+    google.accounts.id.renderButton(container, {
+        theme: "filled_black",
+        size: "large",
+        type: "standard",
+        shape: "pill",
+        text: "continue_with",
+        logo_alignment: "left",
+        width: 260
+    });
+}
+      
       const API_BASE = apiBaseMeta ? apiBaseMeta.content : "/api";
       const accessTokenStorageKey = "atomic-clam-access-token";
       const refreshTokenStorageKey = "atomic-clam-refresh-token";
 
-      const googleOnload = app.querySelector("#g_id_onload");
-      if (googleOnload && GOOGLE_CLIENT_ID) {
-        googleOnload.dataset.clientId = GOOGLE_CLIENT_ID;
-      }
 
       window.handleGoogleCredentialResponse = async function handleGoogleCredentialResponse(response) {
         try {
