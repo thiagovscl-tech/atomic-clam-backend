@@ -1454,9 +1454,17 @@
       }
 
       function storeAgeVerification(verification) {
-        if (!verification?.ageVerified) return;
-        sessionStorage.setItem(ageVerificationStorageKey, JSON.stringify(verification));
-      }
+  console.log("STORE", verification);
+
+  if (!verification?.ageVerified) return;
+
+  sessionStorage.setItem(
+    ageVerificationStorageKey,
+    JSON.stringify(verification)
+  );
+
+  console.log("SALVO", sessionStorage.getItem(ageVerificationStorageKey));
+}
 
       function passwordScore(password) {
         let score = 0;
@@ -1667,11 +1675,18 @@ function initializeGoogleLogin() {
 
       window.handleGoogleCredentialResponse = async function handleGoogleCredentialResponse(response) {
         try {
-          const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken: response.credential })
-          });
+         console.log(
+  "Age verification in sessionStorage:",
+  sessionStorage.getItem(ageVerificationStorageKey)
+);
+
+const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    idToken: response.credential
+  })
+});
 
           if (!apiResponse.ok) {
             throw new Error("Falha na autenticação com o Google.");
