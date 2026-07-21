@@ -1680,34 +1680,20 @@ function initializeGoogleLogin() {
   sessionStorage.getItem(ageVerificationStorageKey)
 );
 
+const ageVerification = JSON.parse(
+  sessionStorage.getItem(ageVerificationStorageKey) || "null"
+);
+
+console.log("Enviando ageVerification:", ageVerification);
+
 const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    idToken: response.credential
+    idToken: response.credential,
+    ageVerification
   })
 });
-
-          if (!apiResponse.ok) {
-            throw new Error("Falha na autenticação com o Google.");
-          }
-
-          const data = await apiResponse.json();
-          sessionStorage.setItem(accessTokenStorageKey, data.accessToken);
-          sessionStorage.setItem(refreshTokenStorageKey, data.refreshToken);
-
-          if (data.ageVerified) {
-            sessionAgeVerification = { ageVerified: true };
-            storeAgeVerification(sessionAgeVerification);
-            showView("home");
-          } else {
-            showView("age");
-          }
-        } catch (error) {
-          showToast("Não foi possível continuar com o Google agora. Tente novamente.");
-        }
-      };
-
       // Apple e Microsoft: arquitetura preparada no backend (AuthenticationService
       // já é agnóstico de provider), mas as credenciais/estratégias ainda não
       // foram habilitadas em produção. Por isso o clique é honesto sobre o
