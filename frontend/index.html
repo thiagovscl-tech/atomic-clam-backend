@@ -1454,17 +1454,9 @@
       }
 
       function storeAgeVerification(verification) {
-  console.log("STORE", verification);
-
-  if (!verification?.ageVerified) return;
-
-  sessionStorage.setItem(
-    ageVerificationStorageKey,
-    JSON.stringify(verification)
-  );
-
-  console.log("SALVO", sessionStorage.getItem(ageVerificationStorageKey));
-}
+        if (!verification?.ageVerified) return;
+        sessionStorage.setItem(ageVerificationStorageKey, JSON.stringify(verification));
+      }
 
       function passwordScore(password) {
         let score = 0;
@@ -1675,28 +1667,20 @@ function initializeGoogleLogin() {
 
       window.handleGoogleCredentialResponse = async function handleGoogleCredentialResponse(response) {
         try {
-         console.log("ANTES DO FETCH");
-console.log("sessionAgeVerification =", sessionAgeVerification);
-debugger;
+          const ageVerification = JSON.parse(
+            sessionStorage.getItem(ageVerificationStorageKey) || "null"
+          );
 
-const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-const ageVerification = JSON.parse(
-  sessionStorage.getItem(ageVerificationStorageKey) || "null"
-);
-
-console.log("Enviando ageVerification:", ageVerification);
-
-const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    idToken: response.credential,
-    ageVerification
-  })
-})
-});
+          const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              idToken: response.credential,
+              ageVerification
+            })
+          });
 
           if (!apiResponse.ok) {
             throw new Error("Falha na autenticação com o Google.");
