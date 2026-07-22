@@ -990,7 +990,7 @@
       <div class="ac-loader" aria-label="Carregando experiência">
         <span></span>
       </div>
-      <button class="ac-skip" type="button" data-go="age">Entrar agora</button>
+      <button class="ac-skip" type="button" data-go="login">Entrar agora</button>
     </div>
 
     <div class="ac-view ac-age-gate" data-view="age">
@@ -1049,7 +1049,7 @@
             <span class="ac-oauth-label">Apple</span>
           </button>
 
-          <button class="ac-oauth-btn" type="button" data-provider="google" aria-label="Continuar com Google">
+          <div class="ac-oauth-btn" data-provider="google" role="button" tabindex="0" aria-label="Continuar com Google">
             <span class="ac-oauth-pill">
               <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/>
@@ -1060,9 +1060,9 @@
             </span>
             <span class="ac-oauth-label">Google</span>
             <span class="ac-google-overlay">
-            <div id="googleButton"></div>
+            <span id="googleButton"></span>
             </span>
-          </button>
+          </div>
 
           <button class="ac-oauth-btn" type="button" data-provider="microsoft" aria-label="Continuar com Microsoft">
             <span class="ac-oauth-pill">
@@ -1411,7 +1411,7 @@
       function completeIntro() {
         const splash = app.querySelector('[data-view="splash"]');
         splash.classList.add("is-leaving");
-        window.setTimeout(() => showView(sessionAgeVerification?.ageVerified ? "login" : "age"), motionQuery.matches ? 30 : 280);
+        window.setTimeout(() => showView("login"), motionQuery.matches ? 30 : 280);
       }
 
   function showView(name) {
@@ -1565,25 +1565,93 @@
         showView("login");
       });
 
-      app.querySelector("[data-login-form]").addEventListener("submit", (event) => {
-        event.preventDefault();
-        if (!sessionAgeVerification?.ageVerified) {
-          showToast("Valide sua idade antes de fazer login.");
-          showView("age");
+      const googleClientIdMeta = document.querySelector('meta[name="atomic-clam-google-client-id"]');
+      const apiBaseMeta = document.querySelector('meta[name="atomic-clam-api-base"]');
+      const GOOGLE_CLIENT_ID = googleClientIdMeta ? googleClientIdMeta.content.trim() : "";
+      const API_BASE = (apiBaseMeta ? apiBaseMeta.content : "/api").replace(/\/$/, "");
+      const accessTokenStorageKey = "atomic-clam-access-token";
+      const refreshTokenStorageKey = "atomic-clam-refresh-token";
+      let googleLoginInitialized = false;
+      let googleLoginRetryId = null;
+
+      async function apiRequest(path, options = {}) {
+        const response = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+          }
+        });
+        const contentType = response.headers.get("content-type") || "";
+        const payload = contentType.includes("application/json") ? await response.json() : null;
+        if (!response.ok) {
+          const message = payload?.message || payload?.error || "Não foi possível concluir a solicitação.";
+          throw new Error(Array.isArray(message) ? message.join(" ") : message);
+        }
+        return payload;
+      }
+
+      function persistAuth(data) {
+        sessionStorage.setItem(accessTokenStorageKey, data.accessToken);
+        sessionStorage.setItem(refreshTokenStorageKey, data.refreshToken);
+      }
+
+      async function persistAgeVerificationOnBackend(verification, accessToken) {
+        if (!verification?.ageVerified || !verification.birthDate || !accessToken) return null;
+        return apiRequest("/age-verification/verify", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            day: verification.birthDate.day,
+            month: verification.birthDate.month,
+            year: verification.birthDate.year,
+            countryCode: verification.countryCode,
+            region: verification.region
+          })
+        });
+      }
+
+      async function finishAuthenticatedFlow(data, verification = sessionAgeVerification) {
+        persistAuth(data);
+        if (verification?.ageVerified && !data.ageVerified) {
+          const ageResult = await persistAgeVerificationOnBackend(verification, data.accessToken);
+          data.ageVerified = ageResult?.ageVerified === true;
+        }
+        if (data.ageVerified) {
+          sessionAgeVerification = verification?.ageVerified ? verification : { ageVerified: true };
+          storeAgeVerification(sessionAgeVerification);
+          showView("home");
           return;
         }
-        const button = event.currentTarget.querySelector("button[type='submit']");
+        showView("age");
+      }
+
+      app.querySelector("[data-login-form]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const data = new FormData(form);
+        const button = form.querySelector("button[type='submit']");
         button.disabled = true;
         button.textContent = "Entrando...";
-        window.setTimeout(() => {
+        try {
+          const authData = await apiRequest("/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              email: String(data.get("email")).trim(),
+              password: String(data.get("password"))
+            })
+          });
+          await finishAuthenticatedFlow(authData);
+          showToast("Login realizado com sucesso.");
+        } catch (error) {
+          showToast(error.message || "E-mail ou senha inválidos.");
+        } finally {
           button.disabled = false;
           button.textContent = "Entrar";
-          showToast("Sessão iniciada. Em produção, o backend validaria credenciais, rate limit e tokens.");
-          showView("home");
-        }, 900);
+        }
       });
 
-      app.querySelector("[data-signup-form]").addEventListener("submit", (event) => {
+      app.querySelector("[data-signup-form]").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const data = new FormData(form);
@@ -1607,114 +1675,77 @@
           showToast("Revise a senha antes de continuar.");
           return;
         }
-        sessionAgeVerification = verification;
-        storeAgeVerification(verification);
-        console.info("Age verification payload for backend persistence:", {
-          countryCode: verification.countryCode,
-          region: verification.region,
-          birthDate: verification.birthDate,
-          isAdult: verification.isAdult,
-          ageVerified: verification.ageVerified,
-          ageVerifiedAt: verification.ageVerifiedAt,
-          verificationMethod: verification.verificationMethod,
-          verificationProvider: verification.verificationProvider
-        });
-        showToast("Conta validada. Em produção, o backend repetiria a verificação e criaria a sessão.");
-        window.setTimeout(() => showView("home"), 1200);
+        const button = form.querySelector("button[type='submit']");
+        button.disabled = true;
+        button.textContent = "Criando...";
+        try {
+          sessionAgeVerification = verification;
+          storeAgeVerification(verification);
+          const authData = await apiRequest("/auth/signup", {
+            method: "POST",
+            body: JSON.stringify({
+              name: String(data.get("name")).trim(),
+              email: String(data.get("email")).trim(),
+              password
+            })
+          });
+          await finishAuthenticatedFlow(authData, verification);
+          showToast("Conta criada com sucesso.");
+        } catch (error) {
+          showToast(error.message || "Não foi possível criar a conta agora.");
+        } finally {
+          button.disabled = false;
+          button.textContent = "Criar conta";
+        }
       });
 
-      // --- Integração Google OAuth 2.0 (GIS + backend NestJS) ---
-      // Adicionada de forma incremental: não substitui nem altera o
-      // Login com Email/Senha, apenas oferece um caminho adicional que
-      // usa o MESMO AuthenticationService no backend.
-      const googleClientIdMeta = document.querySelector('meta[name="atomic-clam-google-client-id"]');
-      const apiBaseMeta = document.querySelector('meta[name="atomic-clam-api-base"]');
-     const GOOGLE_CLIENT_ID = googleClientIdMeta ? googleClientIdMeta.content : "";
+      function initializeGoogleLogin() {
+        if (googleLoginInitialized) return;
 
-function initializeGoogleLogin() {
+        if (!GOOGLE_CLIENT_ID) {
+          console.error("Google Client ID não encontrado.");
+          return;
+        }
 
-    if (!GOOGLE_CLIENT_ID) {
-        console.error("Google Client ID não encontrado.");
-        return;
-    }
+        if (!window.google || !window.google.accounts?.id) {
+          window.clearTimeout(googleLoginRetryId);
+          googleLoginRetryId = window.setTimeout(initializeGoogleLogin, 250);
+          return;
+        }
 
-    if (!window.google || !google.accounts) {
-        console.error("Google Identity Services ainda não carregou.");
-        return;
-    }
+        const container = document.getElementById("googleButton");
+        if (!container) return;
 
-    google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: true
-    });
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true
+        });
 
-    const container = document.getElementById("googleButton");
-
-    if (!container)
-        return;
-
-    container.innerHTML = "";
-
-    google.accounts.id.renderButton(container, {
-        theme: "filled_black",
-        size: "large",
-        type: "standard",
-        shape: "pill",
-        text: "continue_with",
-        logo_alignment: "left",
-        width: 260
-    });
-}
-      
-      const API_BASE = apiBaseMeta ? apiBaseMeta.content : "/api";
-      const accessTokenStorageKey = "atomic-clam-access-token";
-      const refreshTokenStorageKey = "atomic-clam-refresh-token";
-
+        container.innerHTML = "";
+        window.google.accounts.id.renderButton(container, {
+          theme: "filled_black",
+          size: "large",
+          type: "standard",
+          shape: "pill",
+          text: "continue_with",
+          logo_alignment: "left",
+          width: 260
+        });
+        googleLoginInitialized = true;
+      }
 
       window.handleGoogleCredentialResponse = async function handleGoogleCredentialResponse(response) {
         try {
-         console.log("ANTES DO FETCH");
-console.log("sessionAgeVerification =", sessionAgeVerification);
-debugger;
-
-const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-const ageVerification = JSON.parse(
-  sessionStorage.getItem(ageVerificationStorageKey) || "null"
-);
-
-console.log("Enviando ageVerification:", ageVerification);
-
-const apiResponse = await fetch(`${API_BASE}/auth/google/token`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    idToken: response.credential,
-    ageVerification
-  })
-})
-});
-
-          if (!apiResponse.ok) {
-            throw new Error("Falha na autenticação com o Google.");
-          }
-
-          const data = await apiResponse.json();
-          sessionStorage.setItem(accessTokenStorageKey, data.accessToken);
-          sessionStorage.setItem(refreshTokenStorageKey, data.refreshToken);
-
-          if (data.ageVerified) {
-            sessionAgeVerification = { ageVerified: true };
-            storeAgeVerification(sessionAgeVerification);
-            showView("home");
-          } else {
-            showView("age");
-          }
+          const authData = await apiRequest("/auth/google/token", {
+            method: "POST",
+            body: JSON.stringify({ idToken: response.credential })
+          });
+          await finishAuthenticatedFlow(authData);
+          showToast("Login com Google realizado com sucesso.");
         } catch (error) {
-          showToast("Não foi possível continuar com o Google agora. Tente novamente.");
+          showToast(error.message || "Não foi possível continuar com o Google agora. Tente novamente.");
         }
       };
 
